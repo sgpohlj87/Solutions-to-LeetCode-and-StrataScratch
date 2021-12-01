@@ -74,3 +74,24 @@ VALUES
 ('1','1'),
 ('2','2'),
 ('3','2');
+
+WITH month_average AS (
+SELECT DATE(DATE_TRUNC('month',pay_date)) AS pay_month, AVG(amount) AS month_avg
+FROM salary
+GROUP BY pay_month)
+
+SELECT d.pay_month, d.department_id, 
+CASE WHEN dept_avg > month_avg THEN 'higher'
+          WHEN dept_avg < month_avg  THEN 'lower'
+          ELSE 'same' END AS comparison
+FROM (
+SELECT DATE(DATE_TRUNC('month',pay_date)) AS pay_month, department_id, AVG(amount) AS dept_avg
+FROM (
+SELECT s.*, department_id 
+FROM salary AS s
+LEFT JOIN employee as e
+ON s.employee_id = e.employee_id) AS subquery
+GROUP BY pay_month, department_id
+ORDER BY AVG(amount) DESC) AS d
+LEFT JOIN month_average AS m
+ON d.pay_month = m.pay_month;
