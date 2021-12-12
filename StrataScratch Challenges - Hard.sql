@@ -1,2 +1,0 @@
--- StrataScratch Coding Challenge: Hard
-
