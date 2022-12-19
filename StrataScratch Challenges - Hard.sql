@@ -836,3 +836,110 @@ page_titles AS (
 SELECT *
 FROM page_titles
 WHERE left_page_number % 2 = 0
+
+--ID 9634: Host Response Rates With Cleaning Fees
+--Find the average host response rate with a cleaning fee for each zipcode. Present the results as a percentage along with the zip code value.
+--Convert the column 'host_response_rate' from TEXT to NUMERIC using type casts and string processing (take missing values as NULL).
+--Order the result in ascending order based on the average host response rater after cleaning.
+
+SELECT zipcode, AVG(CAST(REPLACE(host_response_rate,'%','') AS NUMERIC)) AS avg_host_response_rate 
+FROM airbnb_search_details
+WHERE cleaning_fee = TRUE 
+GROUP BY zipcode
+HAVING AVG(CAST(REPLACE(host_response_rate,'%','') AS NUMERIC)) IS NOT NULL
+ORDER BY avg_host_response_rate
+
+--ID 10145:Make a pivot table to find the highest payment in each year for each employee
+--Make a pivot table to find the highest payment in each year for each employee.
+--Find payment details for 2011, 2012, 2013, and 2014.
+--Output payment details along with the corresponding employee name.
+--Order records by the employee name in ascending order
+
+SELECT employeename, MAX(pay_2011) AS pay_2011, MAX(pay_2012) AS pay_2012, MAX(pay_2013) AS pay_2013, MAX(pay_2014) AS pay_2014
+FROM (
+SELECT employeename,
+    CASE WHEN year=2011 THEN totalpay ELSE 0 END AS pay_2011,
+    CASE WHEN year=2012 THEN totalpay ELSE 0 END AS pay_2012,
+    CASE WHEN year=2013 THEN totalpay ELSE 0 END AS pay_2013,
+    CASE WHEN year=2014 THEN totalpay ELSE 0 END AS pay_2014
+FROM sf_public_salaries) AS subquery
+GROUP BY employeename
+ORDER BY employeename
+
+--ID 10045: Points Rating Of Wines Over Time
+--Find the average points difference between each and previous years starting from the year 2000. Output the year, average points, previous average points, and the difference between them.
+--If you're unable to calculate the average points rating for a specific year, use an 87 average points rating for that year (which is the average of all wines starting from 2000).
+
+SELECT year, COALESCE(AVG(points),87) AS avg_points, COALESCE(LAG(COALESCE(AVG(points),87)) OVER(ORDER BY year),87) AS prev_avg_points, COALESCE(AVG(points),87) - COALESCE(LAG(COALESCE(AVG(points),87)) OVER(ORDER BY year),87) AS difference
+FROM (
+select *, substring(title FROM '20[0-9][0-9]') AS year from winemag_p2) AS subquery
+WHERE year IS NOT NULL
+GROUP BY year
+ORDER BY year
+
+--ID 2078: From Microsoft to Google
+--Consider all LinkedIn users who, at some point, worked at Microsoft. For how many of them was Google their next employer right after Microsoft (no employers in between)?
+
+SELECT COUNT(DISTINCT user_id)
+FROM (
+SELECT *, LEAD(employer,1) OVER (PARTITION BY user_id ORDER BY start_date) AS lead_employer
+FROM linkedin_users) AS subquery
+WHERE employer = 'Microsoft' AND lead_employer = 'Google'
+
+--ID 2076: Trips in Consecutive Months
+--Find the IDs of the drivers who completed at least one trip a month for at least two months in a row.
+
+SELECT *, DATE(LAG(trip_month,1) OVER (PARTITION BY driver_id ORDER BY trip_month)) AS lag_trip_month
+FROM (
+SELECT driver_id, DATE(DATE_TRUNC('month',trip_date)) AS trip_month, SUM(CASE WHEN is_completed='TRUE' THEN 1 END) AS num_trips
+FROM uber_trips
+GROUP BY driver_id, trip_month
+ORDER BY driver_id, trip_month) AS subquery
+WHERE num_trips > 0
+
+--ID 2029:The Most Popular Client_Id Among Users Using Video and Voice Calls
+--Select the most popular client_id based on a count of the number of users who have at least 50% of their events from the following list: 'video call received', 'video call sent', 'voice call received', 'voice call sent'.
+
+SELECT client_id
+FROM (
+SELECT client_id, user_id,
+COUNT(DISTINCT CASE WHEN event_type IN ('video call received','video call sent','voice call received','voice call sent') THEN event_id END) AS cnt_event_id_selected,
+COUNT(DISTINCT event_id) AS cnt_event_id,
+COUNT(DISTINCT CASE WHEN event_type IN ('video call received','video call sent','voice call received','voice call sent') THEN event_id END)*100 / COUNT(DISTINCT event_id) AS pct
+FROM fact_events
+GROUP BY client_id, user_id) AS subquery
+WHERE pct > 50
+GROUP BY client_id
+ORDER BY COUNT(DISTINCT user_id) DESC
+LIMIT 1
+
+--ID 9883: Find the oldest survivor per passenger class
+--Find the oldest survivor of each passenger class.
+--Output the name and the age of the survivor along with the corresponding passenger class.
+--Order records by passenger class in ascending order
+
+SELECT name, age, pclass
+FROM (
+SELECT *, MAX(age) OVER(PARTITION BY pclass ORDER BY age DESC) AS max_age_per_class
+FROM titanic
+WHERE survived=1) AS sub
+WHERE age=max_age_per_class
+ORDER BY pclass
+
+--ID 9793: Average Time Between Steps
+--Find the average time (in seconds), per product, that needed to progress between steps. You can ignore products that were never used. Output the feature id and the average time.
+
+SELECT feature_id, AVG(avg_diff)
+FROM (
+SELECT feature_id, user_id, AVG(diff) AS avg_diff
+FROM (
+SELECT *, EXTRACT(EPOCH FROM timestamp::TIMESTAMP - lag_timestamp::TIMESTAMP) AS diff
+FROM (
+SELECT *, LAG(timestamp,1) OVER (PARTITION BY feature_id, user_id ORDER BY step_reached) AS lag_timestamp
+FROM facebook_product_features_realizations
+) AS subquery
+) AS subquery2
+GROUP BY feature_id, user_id
+HAVING AVG(diff) IS NOT NULL
+) AS subquery3
+GROUP BY feature_id
